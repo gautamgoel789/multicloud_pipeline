@@ -65,7 +65,7 @@ jobs:
       - name: Deploy to Cluster
         run: bash config/deploy.sh ${{ matrix.cluster }}
 
-  security-checks:
+  policy-enforcement:
     needs: deploy
     runs-on: ubuntu-latest
     strategy:
@@ -90,37 +90,24 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Run Security Checks
-        run: bash config/security.sh
-
-  policy-enforcement:
-    needs: security-checks
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up AWS CLI
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Apply OPA Policies to EKS
+      - name: Configure kubeconfig
         run: |
-          aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
-          kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
-          kubectl apply -f policies/gatekeeper-templates/constraint.yaml
+          if [ "${{ matrix.cluster }}" == "eks" ]; then
+            aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+          else
+            az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
+          fi
 
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Apply OPA Policies to AKS
+      - name: Install OPA Gatekeeper
         run: |
-          az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
+          kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.11/deploy/gatekeeper.yaml
+          kubectl wait --for=condition=Available --timeout=180s -n gatekeeper-system deployment/gatekeeper-controller-manager
+
+      - name: Apply ConstraintTemplate
+        run: |
           kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
+          kubectl wait --for=condition=Established --timeout=60s crd/k8sdisallowlatesttags.constraints.gatekeeper.sh
+
+      - name: Apply Constraint
+        run: |
           kubectl apply -f policies/gatekeeper-templates/constraint.yaml
