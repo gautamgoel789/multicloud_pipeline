@@ -110,7 +110,10 @@ jobs:
       - name: Wait for CRD to be Registered
         run: |
           for i in {1..10}; do
-            kubectl get crd k8sdisallowlatesttags.constraints.gatekeeper.sh && break
+            if kubectl get crd k8sdisallowlatesttags.constraints.gatekeeper.sh; then
+              echo "CRD found."
+              break
+            fi
             echo "Waiting for CRD k8sdisallowlatesttags to be created..."
             sleep 10
           done
@@ -119,6 +122,14 @@ jobs:
         run: |
           kubectl wait --for=condition=Established --timeout=60s crd/k8sdisallowlatesttags.constraints.gatekeeper.sh
 
+      - name: Re-Apply ConstraintTemplate
+        run: |
+          kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
+
       - name: Apply Constraint
         run: |
           kubectl apply -f policies/gatekeeper-templates/constraint.yaml
+
+      - name: Verify Constraint
+        run: |
+          kubectl get k8sdisallowlatesttag
