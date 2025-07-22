@@ -1,1 +1,43 @@
+Step 1:
+Get the static webpage from the devloper.Build the dockerfile for the same.
+
+Step 2:
+AWS:
+eksctl create cluster \
+  --name my-eks-cluster \
+  --version 1.29 \
+  --region us-east-1 \
+  --nodegroup-name standard-workers \
+  --node-type t2.micro \
+  --nodes 4 \
+  --nodes-min 1 \
+  --nodes-max 4 \
+  --managed
+
+EKS:
+az group create --name 
+myResourceGroup --location eastus               #created the resource group first
+
+az aks create \
+  --resource-group myResourceGroup \
+  --name myAKSCluster \
+  --node-count 4 \
+  --generate-ssh-keys \
+  --node-vm-size Standard_B2S
+Step 3:
+write commaon depolyment file for the same.
+Step 4:
+write service.yaml file and security file.
+Step 5:
+Wrote the gatekeeper policy through which we disallow the use of tag LATEST.
+
+Step 6:
+
+initialized a git repo
+Pushed our code to the repo (git push origin main)
+
+Step 7:
+
+Waited for the pipeline to execute all the stages.
+
 
