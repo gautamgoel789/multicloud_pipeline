@@ -12,9 +12,20 @@ spec:
       rego: |
         package k8sdisallowlatesttag
 
-        violation[{"msg": msg, "details": {}}] {
+        violation[{"msg": msg, "details": {"container": container.name}}] {
           container := input.review.object.spec.containers[_]
-          endswith(container.image, ":latest")
+          is_latest_tag(container.image)
           msg := sprintf("Container <%v> is using the 'latest' tag, which is disallowed.", [container.name])
         }
+
+        violation[{"msg": msg, "details": {"initContainer": container.name}}] {
+          container := input.review.object.spec.initContainers[_]
+          is_latest_tag(container.image)
+          msg := sprintf("InitContainer <%v> is using the 'latest' tag, which is disallowed.", [container.name])
+        }
+
+        is_latest_tag(image) {
+          endswith(image, ":latest")
+        }
+
 
