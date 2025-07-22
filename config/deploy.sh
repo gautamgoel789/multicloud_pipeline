@@ -1,45 +1,30 @@
 #!/bin/bash
 
-CLUSTER_TYPE=$1  # eks or aks
+set -e
 
-if [ -z "$CLUSTER_TYPE" ]; then
-  echo "Usage: ./deploy.sh <eks|aks>"
+CLUSTER=$1
+IMAGE_TAG=$2
+
+DOCKER_USERNAME="${DOCKER_USERNAME:-yourdockerusername}"  # fallback if env not set
+IMAGE="$DOCKER_USERNAME/static-website:$IMAGE_TAG"
+
+echo "Deploying to $CLUSTER with image tag: $IMAGE_TAG"
+
+# Set kubeconfig for the right cluster
+if [ "$CLUSTER" == "eks" ]; then
+  echo "Configuring kubeconfig for EKS..."
+  aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+elif [ "$CLUSTER" == "aks" ]; then
+  echo "Configuring kubeconfig for AKS..."
+  az aks get-credentials --resource-group "$AZURE_RESOURCE_GROUP" --name "$AKS_CLUSTER_NAME"
+else
+  echo "Unknown cluster type: $CLUSTER"
   exit 1
 fi
 
-# Compose the Docker image name automatically from env/Secrets
-DOCKER_IMAGE_TAG="${DOCKER_USERNAME}/static-website:latest"
+echo "Updating Kubernetes deployment with image: $IMAGE"
 
-echo "Cluster Type: $CLUSTER_TYPE"
-echo "Using Docker Image: $DOCKER_IMAGE_TAG"
+kubectl set image deployment/multi-cloud-app web="$IMAGE" --namespace default
 
-# Configure kubectl based on cluster type
-if [ "$CLUSTER_TYPE" == "eks" ]; then
-    echo "Configuring kubectl for AWS EKS cluster: $EKS_CLUSTER_NAME"
-    aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
-
-elif [ "$CLUSTER_TYPE" == "aks" ]; then
-    echo "Configuring kubectl for Azure AKS cluster: $AKS_CLUSTER_NAME"
-    az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID"
-    az aks get-credentials --resource-group "$AZURE_RESOURCE_GROUP" --name "$AKS_CLUSTER_NAME"
-
-else
-    echo "❌ Unsupported cluster type. Use eks or aks."
-    exit 1
-fi
-
-echo "Preparing manifests with Docker image: $DOCKER_IMAGE_TAG"
-
-TEMP_MANIFEST_DIR=$(mktemp -d)
-cp src/* "$TEMP_MANIFEST_DIR"/
-
-# Replace the image placeholder
-sed -i "s|__DOCKER_IMAGE_PLACEHOLDER__|$DOCKER_IMAGE_TAG|g" "$TEMP_MANIFEST_DIR"/deployment.yaml
-
-kubectl apply -f "$TEMP_MANIFEST_DIR"/deployment.yaml
-kubectl apply -f "$TEMP_MANIFEST_DIR"/service.yaml
-
-rm -rf "$TEMP_MANIFEST_DIR"
-
-echo "✅ Deployment to $CLUSTER_TYPE completed with image: $DOCKER_IMAGE_TAG"
-
+echo "Deployment updated successfully."
+kubectl rollout status deployment/multi-cloud-app --namespace default
