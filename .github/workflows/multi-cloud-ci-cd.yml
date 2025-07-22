@@ -9,6 +9,7 @@ on:
     types: [published]
 
 env:
+  DOCKER_IMAGE: ${{ secrets.DOCKER_USERNAME }}/static-website:latest
   AWS_REGION: ${{ secrets.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
   AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
@@ -18,17 +19,9 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.meta.outputs.tag }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Generate Image Tag
-        id: meta
-        run: |
-          TAG=$(date +%Y%m%d%H%M%S)
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -41,9 +34,8 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/static-website:${{ steps.meta.outputs.tag }}
-          docker build -t $IMAGE ./src
-          docker push $IMAGE
+          docker build -t $DOCKER_IMAGE ./src
+          docker push $DOCKER_IMAGE
 
   deploy:
     needs: build-and-push
@@ -53,7 +45,7 @@ jobs:
         cluster: [eks, aks]
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up AWS CLI
@@ -70,19 +62,10 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Configure kubeconfig
-        run: |
-          if [ "${{ matrix.cluster }}" == "eks" ]; then
-            aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
-          else
-            az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
-          fi
-
       - name: Deploy to Cluster
-        run: |
-          bash config/deploy.sh ${{ matrix.cluster }} ${{ needs.build-and-push.outputs.image_tag }}
+        run: bash config/deploy.sh ${{ matrix.cluster }}
 
-  policy-enforcement:
+  security-checks:
     needs: deploy
     runs-on: ubuntu-latest
     strategy:
@@ -93,35 +76,51 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure kubeconfig
-        run: |
-          if [ "${{ matrix.cluster }}" == "eks" ]; then
-            aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
-          else
-            az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
-          fi
+      - name: Set up AWS CLI
+        if: matrix.cluster == 'eks'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Install OPA Gatekeeper
-        run: |
-          kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.11/deploy/gatekeeper.yaml
-          kubectl wait --for=condition=Available --timeout=180s -n gatekeeper-system deployment/gatekeeper-controller-manager
+      - name: Azure Login
+        if: matrix.cluster == 'aks'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Apply ConstraintTemplate
+      - name: Run Security Checks
+        run: bash config/security.sh
+
+  policy-enforcement:
+    needs: security-checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Apply OPA Policies to EKS
         run: |
+          aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
           kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
+          kubectl apply -f policies/gatekeeper-templates/constraint.yaml
 
-      - name: Wait for CRD to be Registered
-        run: |
-          for i in {1..10}; do
-            kubectl get crd k8sdisallowlatesttags.constraints.gatekeeper.sh && break
-            echo "Waiting for CRD k8sdisallowlatesttags to be created..."
-            sleep 10
-          done
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Wait for CRD to be Established
+      - name: Apply OPA Policies to AKS
         run: |
-          kubectl wait --for=condition=Established --timeout=60s crd/k8sdisallowlatesttags.constraints.gatekeeper.sh
-
-      - name: Apply Constraint
-        run: |
+          az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
+          kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
           kubectl apply -f policies/gatekeeper-templates/constraint.yaml
