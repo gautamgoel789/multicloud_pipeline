@@ -8,5 +8,4 @@ COPY ./src/ /usr/share/nginx/html
 EXPOSE 80
 
 # Command to run Nginx (default command of the base image)
-CMD ["nginx", "-g", "daemon off;"]
-~                                     
+CMD ["nginx", "-g", "daemon off;"]                                   
