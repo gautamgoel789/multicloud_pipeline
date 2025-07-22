@@ -9,4 +9,3 @@ spec:
         kinds: ["Pod"]
       - apiGroups: ["apps"]
         kinds: ["Deployment", "StatefulSet", "DaemonSet"]
-
