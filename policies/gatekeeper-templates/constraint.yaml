@@ -1,11 +1,11 @@
 apiVersion: constraints.gatekeeper.sh/v1beta1
 kind: K8sDisallowLatestTag
 metadata:
-  name: disallow-latest-tag
+  name: pod-must-not-use-latest-tag
 spec:
   match:
     kinds:
       - apiGroups: [""]
         kinds: ["Pod"]
-      - apiGroups: ["apps"]
-        kinds: ["Deployment", "StatefulSet", "DaemonSet"]
+      - apiGroups: ["apps"] # Also apply to Deployments, DaemonSets, etc.
+        kinds: ["Deployment", "ReplicaSet", "StatefulSet", "DaemonSet"]
