@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: multi-cloud-app
+  name: multi-cloud-app-eks
   labels:
     app: multi-cloud-app
 spec:
@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: web
+        # This is the placeholder that deploy-eks.sh will replace
         image: __DOCKER_IMAGE_PLACEHOLDER__
         ports:
         - containerPort: 80
-
