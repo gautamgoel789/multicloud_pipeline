@@ -108,19 +108,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Apply OPA Policies to EKS
-        run: |
-          aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
-          kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
-          kubectl apply -f policies/gatekeeper-templates/constraint.yaml
+      # - name: Apply OPA Policies to EKS
+      #   run: |
+      #     aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+      #     kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
+      #     kubectl apply -f policies/gatekeeper-templates/constraint.yaml
 
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Apply OPA Policies to AKS
-        run: |
-          az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
-          kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
-          kubectl apply -f policies/gatekeeper-templates/constraint.yaml
+      # - name: Apply OPA Policies to AKS
+      #   run: |
+      #     az aks get-credentials --resource-group $AZURE_RESOURCE_GROUP --name $AKS_CLUSTER_NAME
+      #     kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
+      #     kubectl apply -f policies/gatekeeper-templates/constraint.yaml
