@@ -106,6 +106,17 @@ jobs:
       - name: Apply ConstraintTemplate
         run: |
           kubectl apply -f policies/gatekeeper-templates/constraint-template.yaml
+
+      - name: Wait for CRD to be Registered
+        run: |
+          for i in {1..10}; do
+            kubectl get crd k8sdisallowlatesttags.constraints.gatekeeper.sh && break
+            echo "Waiting for CRD k8sdisallowlatesttags to be created..."
+            sleep 10
+          done
+
+      - name: Wait for CRD to be Established
+        run: |
           kubectl wait --for=condition=Established --timeout=60s crd/k8sdisallowlatesttags.constraints.gatekeeper.sh
 
       - name: Apply Constraint
